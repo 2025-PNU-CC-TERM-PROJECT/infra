@@ -1,0 +1,24 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ms-backend
+  namespace: ms-backend
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"  # 항상 하나 유지 (Cold start 방지)
+    spec:
+      containers:
+        - image: khuni1/ms-backend:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILE
+              value: prod
+            - name: DATASOURCE_URL
+              value: jdbc:postgresql://database:5432/CC-TERM
+            - name: DATASOURCE_USERNAME
+              value: user
+            - name: DATASOURCE_PASSWORD
+              value: "1234"
