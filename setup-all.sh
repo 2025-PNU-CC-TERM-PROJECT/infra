@@ -48,7 +48,8 @@ echo "[3] Knative installed."
 ### 4. Kserve 설치
 echo "[4] Installing Kserve..."
 kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.11.0/cert-manager.yaml
-kubectl apply -f https://github.com/kserve/kserve/releases/download/v0.11.2/kserve.yaml
+kubectl apply --server-side -f https://github.com/kserve/kserve/releases/download/v0.15.0/kserve.yaml
+kubectl apply --server-side -f https://github.com/kserve/kserve/releases/download/v0.15.0/kserve-cluster-resources.yaml
 
 ### 5. 모니터링 구성
 echo "[5] Installing monitoring services..."
