@@ -24,6 +24,11 @@
 
 3. 컨테이너 이미지(프론트/백엔드) 사전 빌드 및 퍼블릭 레지스트리에 업로드
 
+- git clone
+```
+git clone https://github.com/2025-PNU-CC-TERM-PROJECT/infra.git
+```
+
 - 스크립트 실행
 ```
 chmod +x setup-all.sh
