@@ -44,8 +44,14 @@ kubectl patch configmap config-domain \
   -p '{"data":{"example.com":""}}'
 echo "[3] Knative installed."
 
-### 4. 모니터링 구성
-echo "[4] Installing monitoring services..."
+
+### 4. Kserve 설치
+echo "[4] Installing Kserve..."
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.11.0/cert-manager.yaml
+kubectl apply -f https://github.com/kserve/kserve/releases/download/v0.11.2/kserve.yaml
+
+### 5. 모니터링 구성
+echo "[5] Installing monitoring services..."
 #jaeger
 kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samples/addons/jaeger.yaml
 
@@ -60,16 +66,16 @@ kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samp
 
 kubectl apply -f kiali-gateway.yaml
 
-echo "[4] monitoring services installed."
+echo "[5] monitoring services installed."
 
 
-###5. 프론트엔드/백엔드/DB 배포
-echo "[5] Deploying frontend, backend and database..."
+###6. 프론트엔드/백엔드/DB 배포
+echo "[6] Deploying frontend, backend and database..."
 kubectl apply -f postgres.yaml
 kubectl apply -f ksvc-ms-backend.yaml
 kubectl apply -f ksvc-ms-frontend.yaml
 
-### 6. 정보 출력
+### 7. 정보 출력
 echo "📡 IngressGateway external IP:"
 kubectl get svc ingressgateway -n istio-system
 
