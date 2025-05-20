@@ -1,0 +1,19 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: mnist-torchserve
+  namespace: ms-models
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: pytorch
+      storageUri: gs://kfserving-samples/models/torchserve/mnist
+      runtime: "kserve-mlserver"  # 또는 torchserve 를 직접 지정할 수 있음
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: 1
+          memory: 1Gi
