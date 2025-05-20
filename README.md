@@ -37,7 +37,8 @@ chmod +x setup-all.sh
 34.xxx.xxx.xxx  ms-backend.ms-backend.example.com
 '''
 
-**##결과물 예시**
+## 결과물 예시
+
 프론트엔드 접근: http://ms-frontend.ms-frontend.example.com
 
 백엔드 접근: http://ms-backend.ms-backend.example.com
