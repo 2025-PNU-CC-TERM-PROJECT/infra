@@ -25,17 +25,16 @@
 3. 컨테이너 이미지(프론트/백엔드) 사전 빌드 및 퍼블릭 레지스트리에 업로드
 
 - 스크립트 실행
-'''
+```
 chmod +x setup-all.sh
 ./setup-all.sh
-'''
-
+```
 - host 파일에 도메인 추가
-'''
+```
 34.xxx.xxx.xxx  kiali.monitoring.com
 34.xxx.xxx.xxx  ms-frontend.ms-frontend.example.com
 34.xxx.xxx.xxx  ms-backend.ms-backend.example.com
-'''
+```
 
 ## 결과물 예시
 
