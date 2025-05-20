@@ -10,7 +10,7 @@ spec:
         autoscaling.knative.dev/minScale: "1"  # 항상 Pod 1개 유지 (not serverless)
     spec:
       containers:
-        - image: khuni1/ms-front:latest
+        - image: khuni1/ms-frontend:latest
           ports:
             - containerPort: 3000
           env:
