@@ -1,4 +1,4 @@
-# infra
+# infra 구성 파일 및 자동 스크립트
 ## 프로젝트 개요
 
 이 프로젝트는 Istio, Knative, KServe 및 모니터링 도구(Prometheus, Grafana, Kiali 등)를 포함한 클러스터 전체 인프라 구성과 마이크로서비스 배포를 자동화하는 스크립트를 제공합니다.
