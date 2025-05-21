@@ -7,7 +7,8 @@ spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/minScale: "1"  # 항상 Pod 1개 유지 (not serverless)
+        autoscaling.knative.dev/minScale: "0" # serverless 동작을 위해 0으로 설정
+        autoscaling.knative.dev/maxScale: "5" # 최대 5개 Pod까지 확장 가능
     spec:
       containers:
         - image: khuni1/ms-frontend:latest
