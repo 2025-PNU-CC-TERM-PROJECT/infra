@@ -7,7 +7,10 @@ spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/minScale: "1"  # 항상 하나 유지 (Cold start 방지)
+        autoscaling.knative.dev/minScale: "0" # serverless 동작을 위해 0으로 설정
+        autoscaling.knative.dev/maxScale: "5" # 최대 5개 Pod까지 확장 가능
+        # 자동 스케일링 설정
+        autoscaling.knative.dev/target: "50" # 트래픽 부하 기준점 (요청 개수 기준)
     spec:
       containers:
         - image: khuni1/ms-backend:latest
