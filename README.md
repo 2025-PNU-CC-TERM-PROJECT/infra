@@ -36,9 +36,9 @@ chmod +x setup-all.sh
 ```
 - host 파일에 도메인 추가
 ```
-34.xxx.xxx.xxx  kiali.monitoring.com
-34.xxx.xxx.xxx  ms-frontend.ms-frontend.example.com
-34.xxx.xxx.xxx  ms-backend.ms-backend.example.com
+[External IP]  kiali.monitoring.com
+[External IP]  ms-frontend.ms-frontend.example.com
+[External IP]  ms-backend.ms-backend.example.com
 ```
 
 ## 결과물 예시
