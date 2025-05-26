@@ -98,6 +98,11 @@ kubectl patch configmap config-domain \
   -p "{\"data\":{\"${MAGIC_DOMAIN}\":\"\"}}"
 echo "[4] Knative 설치 완료."
 
+### 4-2. Knative initContainers 기능 활성화
+echo "[4-2] Knative initContainers 기능 활성화 중..."
+kubectl patch configmap config-features -n knative-serving --type merge -p '{"data":{"kubernetes.podspec-init-containers":"enabled"}}'
+echo "[4-2] Knative initContainers 기능 활성화 완료."
+
 ### 5. 모니터링 구성
 echo "[5] 모니터링 서비스 설치 중..."
 kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samples/addons/jaeger.yaml
@@ -256,9 +261,29 @@ echo "[5-1] 모니터링 서비스 게이트웨이 설정 완료."
 echo "[5] 모니터링 서비스 설치 완료."
 
 ### 6. 프론트엔드/백엔드/DB 배포
-echo "[6] 애플리케이션 배포 중..."
+echo "[6] 백앤드 및 DB 배포 중..."
 kubectl apply -f postgres.yaml
 kubectl apply -f ksvc-ms-backend.yaml
+
+### 6-1. 프론트엔드 .env.production 생성
+echo "[6-1] 프론트엔드 .env.production 생성..."
+cat <<EOF > ../ms-frontend/.env.production
+NEXT_PUBLIC_API_URL=http://ms-backend.ms-backend.${MAGIC_DOMAIN}
+EOF
+
+### 6-2. Next.js 빌드 및 Docker 이미지 빌드/푸시
+echo "[6-2] Next.js 프론트엔드 빌드 및 이미지 생성..."
+cd ../ms-frontend
+npm install
+npm run build
+
+echo "[6-3] Docker 이미지 빌드 및 푸시..."
+docker build --platform linux/amd64 -t xxhyeok/ms-frontend:latest .
+docker push xxhyeok/ms-frontend:latest
+cd ../infra
+
+### 6-4. 프론트엔드 Knative 서비스 배포
+echo "[6-4] Knative 프론트엔드 서비스 배포..."
 kubectl apply -f ksvc-ms-frontend.yaml
 echo "[6] 애플리케이션 배포 완료."
 
@@ -275,6 +300,5 @@ echo "  • Grafana:    http://grafana.${MAGIC_DOMAIN}"
 echo "  • Jaeger:     http://jaeger.${MAGIC_DOMAIN}"
 echo ""
 echo "  • Frontend:   http://ms-frontend.ms-frontend.${MAGIC_DOMAIN}"
-echo "  • Backend:    http://ms-backend.ms-backend.${MAGIC_DOMAIN}"
 echo ""
 echo "✅ 모든 구성 요소 설치 완료!"

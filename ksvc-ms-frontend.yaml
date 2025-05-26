@@ -7,11 +7,11 @@ spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/minScale: "0" # serverless 동작을 위해 0으로 설정
-        autoscaling.knative.dev/maxScale: "5" # 최대 5개 Pod까지 확장 가능
+        autoscaling.knative.dev/minScale: "0" # 서버리스 동작 허용
+        autoscaling.knative.dev/maxScale: "5"
     spec:
       containers:
-        - image: khuni1/ms-frontend:latest
+        - image: xxhyeok/ms-frontend:latest
           ports:
             - containerPort: 3000
           env:

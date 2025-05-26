@@ -3,7 +3,7 @@
 set -e  # 에러 발생 시 종료
 set -o pipefail
 
-echo "🧹 클러스터에서 모든 구성요소 삭제를 시작합니다..."
+echo "🧹 Magic DNS 구성을 포함한 구성요소 삭제 (KServe 제외)..."
 
 ### 1. 애플리케이션 리소스 삭제
 echo "[1] 애플리케이션 리소스 삭제 중..."
@@ -12,13 +12,18 @@ kubectl delete -f ksvc-ms-backend.yaml --ignore-not-found
 kubectl delete -f postgres.yaml --ignore-not-found
 echo "[1] 애플리케이션 리소스 삭제 완료."
 
-### 2. 모니터링 게이트웨이 삭제
-echo "[2] 모니터링 게이트웨이 삭제 중..."
-kubectl delete -f kiali-gateway.yaml --ignore-not-found
-kubectl delete -f prometheus-gateway.yaml --ignore-not-found
-kubectl delete -f grafana-gateway.yaml --ignore-not-found
-kubectl delete -f jaeger-gateway.yaml --ignore-not-found
-echo "[2] 모니터링 게이트웨이 삭제 완료."
+### 2. Magic DNS로 생성된 게이트웨이 삭제
+echo "[2] Magic DNS 게이트웨이 삭제 중..."
+kubectl delete gateway kiali-gateway -n istio-system --ignore-not-found
+kubectl delete gateway prometheus-gateway -n istio-system --ignore-not-found
+kubectl delete gateway grafana-gateway -n istio-system --ignore-not-found
+kubectl delete gateway jaeger-gateway -n istio-system --ignore-not-found
+
+kubectl delete virtualservice kiali-vs -n istio-system --ignore-not-found
+kubectl delete virtualservice prometheus-vs -n istio-system --ignore-not-found
+kubectl delete virtualservice grafana-vs -n istio-system --ignore-not-found
+kubectl delete virtualservice jaeger-vs -n istio-system --ignore-not-found
+echo "[2] Magic DNS 게이트웨이 삭제 완료."
 
 ### 3. 모니터링 도구 삭제
 echo "[3] 모니터링 도구 삭제 중..."
@@ -59,4 +64,4 @@ kubectl delete namespace knative-eventing --ignore-not-found --wait=false || tru
 kubectl delete namespace istio-system --ignore-not-found --wait=false || true
 echo "[7] 네임스페이스 삭제 완료."
 
-echo "✅ 모든 구성요소 삭제 완료!" 
+echo "✅ Magic DNS 구성을 포함한 구성요소 삭제 완료 (KServe 제외)!" 

@@ -12,15 +12,24 @@ spec:
         # 자동 스케일링 설정
         autoscaling.knative.dev/target: "50" # 트래픽 부하 기준점 (요청 개수 기준)
     spec:
+      initContainers:
+        - name: wait-for-database
+          image: busybox:1.35
+          command:
+            [
+              "sh",
+              "-c",
+              "until nc -z -w 2 database 5432; do echo 'Waiting for database...'; sleep 2; done",
+            ]
       containers:
-        - image: khuni1/ms-backend:latest
+        - image: xxhyeok/ms-backend:latest
           ports:
             - containerPort: 8080
           env:
             - name: SPRING_PROFILE
               value: prod
             - name: DATASOURCE_URL
-              value: jdbc:postgresql://database:5432/CC-TERM
+              value: jdbc:postgresql://database:5432/cc-term
             - name: DATASOURCE_USERNAME
               value: user
             - name: DATASOURCE_PASSWORD
