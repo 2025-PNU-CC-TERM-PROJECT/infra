@@ -29,7 +29,7 @@ spec:
             - name: SPRING_PROFILE
               value: prod
             - name: DATASOURCE_URL
-              value: jdbc:postgresql://database:5432/cc-term
+              value: jdbc:postgresql://database:5432/CC-TERM
             - name: DATASOURCE_USERNAME
               value: user
             - name: DATASOURCE_PASSWORD
