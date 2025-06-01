@@ -21,17 +21,17 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: knative-eventing
----
-apiVersion: v1
-kind: Namespace
-metadata:
   name: ms-frontend
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: ms-backend
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ms-models
 EOF
 echo "[1] 네임스페이스 생성 완료."
 
@@ -64,6 +64,7 @@ echo "[2-1] Istio sidecar injection 활성화 중..."
 kubectl label namespace default istio-injection=enabled --overwrite
 kubectl label namespace ms-frontend istio-injection=enabled --overwrite
 kubectl label namespace ms-backend istio-injection=enabled --overwrite
+kubectl label namespace ms-models istio-injection=enabled --overwrite
 echo "[2-1] 라벨 추가 완료."
 
 ### 3. External IP 확인 및 Magic DNS 도메인 설정
@@ -263,7 +264,47 @@ echo "[5] 모니터링 서비스 설치 완료."
 ### 6. 프론트엔드/백엔드/DB 배포
 echo "[6] 백앤드 및 DB 배포 중..."
 kubectl apply -f postgres.yaml
-kubectl apply -f ksvc-ms-backend.yaml
+
+# AI 서비스 URL을 동적으로 설정하여 백엔드 서비스 배포
+echo "[6-0] AI 서비스 URL을 동적으로 설정하여 백엔드 배포..."
+cat <<EOF | kubectl apply -f -
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ms-backend
+  namespace: ms-backend
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0" # serverless 동작을 위해 0으로 설정
+        autoscaling.knative.dev/maxScale: "5" # 최대 5개 Pod까지 확장 가능
+        # 자동 스케일링 설정
+        autoscaling.knative.dev/target: "50" # 트래픽 부하 기준점 (요청 개수 기준)
+    spec:
+      initContainers:
+        - name: wait-for-database
+          image: busybox:1.35
+          command:
+            [
+              "sh",
+              "-c",
+              "until nc -z -w 2 database 5432; do echo 'Waiting for database...'; sleep 2; done",
+            ]
+      containers:
+        - image: xxhyeok/ms-backend:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILE
+              value: prod
+            - name: DATASOURCE_URL
+              value: jdbc:postgresql://database:5432/cc-term
+            - name: DATASOURCE_USERNAME
+              value: user
+            - name: DATASOURCE_PASSWORD
+              value: "1234"
+EOF
 
 ### 6-1. 프론트엔드 .env.production 생성
 echo "[6-1] 프론트엔드 .env.production 생성..."
@@ -287,7 +328,46 @@ echo "[6-4] Knative 프론트엔드 서비스 배포..."
 kubectl apply -f ksvc-ms-frontend.yaml
 echo "[6] 애플리케이션 배포 완료."
 
-### 7. 정보 출력
+### 6-5. cert-manager 설치
+echo "[6-5] cert-manager 설치 중..."
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+
+echo "[6-5-1] cert-manager CRDs 준비 대기 중..."
+# cert-manager CRDs가 생성될 때까지 대기
+kubectl wait --for condition=established --timeout=60s crd/certificates.cert-manager.io
+kubectl wait --for condition=established --timeout=60s crd/certificaterequests.cert-manager.io
+kubectl wait --for condition=established --timeout=60s crd/issuers.cert-manager.io
+kubectl wait --for condition=established --timeout=60s crd/clusterissuers.cert-manager.io
+
+echo "[6-5-2] cert-manager pods 준비 대기 중..."
+# cert-manager controller pods가 준비될 때까지 대기
+kubectl wait --for=condition=Ready pod -l app=cert-manager -n cert-manager --timeout=300s
+kubectl wait --for=condition=Ready pod -l app=cainjector -n cert-manager --timeout=300s
+kubectl wait --for=condition=Ready pod -l app=webhook -n cert-manager --timeout=300s
+
+echo "[6-5] cert-manager 설치 및 준비 완료."
+
+
+### 7. KServe 설치
+echo "[7] KServe 설치 중..."
+kubectl apply --server-side -f https://github.com/kserve/kserve/releases/download/v0.15.0/kserve.yaml
+kubectl apply --server-side -f https://github.com/kserve/kserve/releases/download/v0.15.0/kserve-cluster-resources.yaml
+
+echo "[7] KServe 설치 완료."
+
+### ai pod 배포
+echo "[7-1] KServe AI 모델 배포 중..."
+kubectl apply -f Kserve-ai-image-serving.yaml
+kubectl apply -f Kserve-ai-text-serving.yaml
+
+echo "[7-2] AI 서비스가 준비될 때까지 대기 중..."
+# AI 서비스가 준비될 때까지 대기
+kubectl wait --for=condition=Ready inferenceservice/ai-image-serving -n ms-models --timeout=300s
+kubectl wait --for=condition=Ready inferenceservice/ai-text-serving -n ms-models --timeout=300s
+
+echo "[7-3] KServe AI 모델 배포 완료."
+
+### 8. 정보 출력
 echo ""
 echo "🎉 설치 완료!"
 echo "📡 IngressGateway External IP: $EXTERNAL_IP"
@@ -300,5 +380,10 @@ echo "  • Grafana:    http://grafana.${MAGIC_DOMAIN}"
 echo "  • Jaeger:     http://jaeger.${MAGIC_DOMAIN}"
 echo ""
 echo "  • Frontend:   http://ms-frontend.ms-frontend.${MAGIC_DOMAIN}"
+echo "  • Backend:    http://ms-backend.ms-backend.${MAGIC_DOMAIN}"
+echo ""
+echo "🤖 AI 서비스 URL들:"
+echo "  • AI Image:   http://ai-image-serving.ms-models.${MAGIC_DOMAIN}/v1/models/mobilenet:predict"
+echo "  • AI Text:    http://ai-text-serving.ms-models.${MAGIC_DOMAIN}/v1/models/kobart-summary:predict"
 echo ""
 echo "✅ 모든 구성 요소 설치 완료!"
