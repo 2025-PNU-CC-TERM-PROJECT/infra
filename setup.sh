@@ -316,13 +316,22 @@ EOF
 
 ### 6-2. Next.js 빌드 및 Docker 이미지 빌드/푸시
 echo "[6-2] Next.js 프론트엔드 빌드 및 이미지 생성..."
+
+DOCKER_REGISTRY=${DOCKER_REGISTRY:-"xxhyeok"}
+FRONTEND_IMAGE="${DOCKER_REGISTRY}/ms-frontend:latest"
+
 cd ../ms-frontend
 npm install
 npm run build
 
 echo "[6-3] Docker 이미지 빌드 및 푸시..."
-docker build --platform linux/amd64 -t xxhyeok/ms-frontend:latest .
-docker push xxhyeok/ms-frontend:latest
+docker build --platform linux/amd64 -t ${FRONTEND_IMAGE} .
+docker push ${FRONTEND_IMAGE}; then
+  echo "Docker 이미지 푸시 성공: ${FRONTEND_IMAGE}"
+else
+  echo "Docker 이미지 푸시 실패: ${FRONTEND_IMAGE}"
+  exit 1
+fi
 cd ../infra
 
 ### 6-4. 프론트엔드 Knative 서비스 배포
