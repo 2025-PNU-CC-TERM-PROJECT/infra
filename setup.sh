@@ -310,6 +310,8 @@ EOF
 echo "[6-1] 프론트엔드 .env.production 생성..."
 cat <<EOF > ../ms-frontend/.env.production
 NEXT_PUBLIC_API_URL=http://ms-backend.ms-backend.${MAGIC_DOMAIN}
+NEXT_PUBLIC_GRAFANA_URL=http://grafana.${MAGIC_DOMAIN}
+NEXT_PUBLIC_KIALI_URL=http://kiali.${MAGIC_DOMAIN}
 EOF
 
 ### 6-2. Next.js 빌드 및 Docker 이미지 빌드/푸시
