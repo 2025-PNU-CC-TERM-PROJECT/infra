@@ -1,3 +1,8 @@
+#
+# Legacy optional manifest.
+# The default architecture keeps ms-frontend outside Kubernetes and exposes only
+# the API domain through Istio Ingress Gateway.
+#
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
@@ -17,3 +22,5 @@ spec:
           env:
             - name: NODE_ENV
               value: production
+            - name: NEXT_PUBLIC_API_URL
+              value: http://api-gateway.ms-gateway.example.com

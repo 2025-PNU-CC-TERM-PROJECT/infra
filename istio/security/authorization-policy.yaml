@@ -1,0 +1,64 @@
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: api-gateway-allow-public-auth
+  namespace: ms-gateway
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            methods: ["POST", "OPTIONS"]
+            paths:
+              - /api/auth/login
+              - /api/auth/signup
+    - to:
+        - operation:
+            methods: ["OPTIONS"]
+            paths:
+              - "*"
+    - to:
+        - operation:
+            methods: ["GET"]
+            paths:
+              - /healthz
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: api-gateway-require-jwt
+  namespace: ms-gateway
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            requestPrincipals: ["*"]
+      to:
+        - operation:
+            paths:
+              - /api/user
+              - /api/user/*
+              - /dashboard/*
+              - /user/*
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: backend-only-from-gateway
+  namespace: ms-backend
+spec:
+  selector:
+    matchLabels:
+      serving.knative.dev/service: ms-backend
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["ms-gateway"]

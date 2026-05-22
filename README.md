@@ -10,7 +10,7 @@
 | `setup-all.sh`          | 전체 클러스터 구성 자동화 스크립트                  |
 | `postgres.yaml`         | PostgreSQL 데이터베이스 배포 구성              |
 | `ksvc-ms-backend.yaml`  | Knative 기반 백엔드 서비스 정의                |
-| `ksvc-ms-frontend.yaml` | Knative 기반 프론트엔드 서비스 정의              |
+| `ksvc-ms-frontend.yaml` | 레거시 프론트엔드 Knative 배포 예시. 기본 구조에서는 프론트엔드를 클러스터 바깥에 배포 |
 | `kiali-gateway.yaml`    | Kiali UI를 외부에 노출시키는 Istio Gateway 설정 |
 | `README.md`             | 프로젝트 설명 문서                           |
 
@@ -37,13 +37,15 @@ chmod +x setup-all.sh
 - host 파일에 도메인 추가
 ```
 [External IP]  kiali.monitoring.com
-[External IP]  ms-frontend.ms-frontend.example.com
+[External IP]  api.example.com
 [External IP]  ms-backend.ms-backend.example.com
 ```
 
 ## 결과물 예시
 
-프론트엔드 접근: http://ms-frontend.ms-frontend.example.com
+API 접근: http://api.example.com
+
+프론트엔드는 Kubernetes 클러스터 바깥(Vercel, S3 + CloudFront, 별도 Nginx 등)에 배포하고 `NEXT_PUBLIC_API_URL`을 Istio Ingress Gateway의 API 도메인으로 설정합니다.
 
 백엔드 접근: http://ms-backend.ms-backend.example.com
 

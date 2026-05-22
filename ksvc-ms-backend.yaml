@@ -7,10 +7,9 @@ spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/minScale: "0" # serverless 동작을 위해 0으로 설정
-        autoscaling.knative.dev/maxScale: "5" # 최대 5개 Pod까지 확장 가능
-        # 자동 스케일링 설정
-        autoscaling.knative.dev/target: "50" # 트래픽 부하 기준점 (요청 개수 기준)
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "5"
+        autoscaling.knative.dev/target: "50"
     spec:
       initContainers:
         - name: wait-for-database
@@ -26,11 +25,19 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            - name: SPRING_PROFILE
+            - name: SPRING_PROFILES_ACTIVE
               value: prod
-            - name: DATASOURCE_URL
-              value: jdbc:postgresql://database:5432/CC-TERM
-            - name: DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://database:5432/cc-term
+            - name: SPRING_DATASOURCE_USERNAME
               value: user
-            - name: DATASOURCE_PASSWORD
+            - name: SPRING_DATASOURCE_PASSWORD
               value: "1234"
+            - name: EXTERNAL_AI_IMAGE_URL
+              value: http://ai-image-serving-predictor.ms-models.svc.cluster.local/v1/models/mobilenet:predict
+            - name: EXTERNAL_AI_IMAGE_HOST
+              value: ai-image-serving-predictor.ms-models.svc.cluster.local
+            - name: EXTERNAL_AI_TEXT_URL
+              value: http://ai-text-serving-predictor.ms-models.svc.cluster.local/v1/models/kobart-summary:predict
+            - name: EXTERNAL_AI_TEXT_HOST
+              value: ai-text-serving-predictor.ms-models.svc.cluster.local

@@ -20,7 +20,7 @@ spec:
             - containerPort: 5432
           env:
             - name: POSTGRES_DB
-              value: CC-TERM
+              value: cc-term
             - name: POSTGRES_USER
               value: user
             - name: POSTGRES_PASSWORD

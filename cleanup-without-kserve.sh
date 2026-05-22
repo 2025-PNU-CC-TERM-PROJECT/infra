@@ -7,7 +7,8 @@ echo "🧹 Magic DNS 구성을 포함한 구성요소 삭제 (KServe 제외)..."
 
 ### 1. 애플리케이션 리소스 삭제
 echo "[1] 애플리케이션 리소스 삭제 중..."
-kubectl delete -f ksvc-ms-frontend.yaml --ignore-not-found
+kubectl delete -f apps/api-gateway-knative.yaml --ignore-not-found
+kubectl delete -f apps/api-gateway.yaml --ignore-not-found
 kubectl delete -f ksvc-ms-backend.yaml --ignore-not-found
 kubectl delete -f postgres.yaml --ignore-not-found
 echo "[1] 애플리케이션 리소스 삭제 완료."
@@ -50,13 +51,13 @@ echo "[5] Istio 삭제 완료."
 ### 6. 라벨 제거
 echo "[6] 네임스페이스 라벨 제거 중..."
 kubectl label namespace default istio-injection- || true
-kubectl label namespace ms-frontend istio-injection- || true
+kubectl label namespace ms-gateway istio-injection- || true
 kubectl label namespace ms-backend istio-injection- || true
 echo "[6] 네임스페이스 라벨 제거 완료."
 
 ### 7. 네임스페이스 삭제
 echo "[7] 네임스페이스 삭제 중..."
-kubectl delete namespace ms-frontend --ignore-not-found --wait=false || true
+kubectl delete namespace ms-gateway --ignore-not-found --wait=false || true
 kubectl delete namespace ms-backend --ignore-not-found --wait=false || true
 kubectl delete namespace monitoring --ignore-not-found --wait=false || true
 kubectl delete namespace knative-serving --ignore-not-found --wait=false || true

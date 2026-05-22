@@ -1,0 +1,41 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: ms-serving-gateway
+  namespace: ms-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api-gateway
+  namespace: ms-gateway
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - ms-serving-gateway
+  http:
+    - name: api
+      match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: api-gateway.ms-gateway.svc.cluster.local
+            port:
+              number: 80
+          headers:
+            request:
+              set:
+                Host: api-gateway.ms-gateway.svc.cluster.local
+      timeout: 30s

@@ -1,0 +1,46 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: ms-backend-from-gateway
+  namespace: ms-gateway
+spec:
+  hosts:
+    - ms-backend.ms-backend.svc.cluster.local
+  http:
+    - name: auth
+      match:
+        - uri:
+            prefix: /api/auth/
+      route:
+        - destination:
+            host: ms-backend.ms-backend.svc.cluster.local
+      timeout: 5s
+    - name: inference-image
+      match:
+        - uri:
+            exact: /dashboard/image-class
+      route:
+        - destination:
+            host: ms-backend.ms-backend.svc.cluster.local
+      timeout: 10s
+      retries:
+        attempts: 1
+        perTryTimeout: 5s
+        retryOn: connect-failure,refused-stream,5xx
+    - name: inference-text
+      match:
+        - uri:
+            exact: /dashboard/text-summary
+      route:
+        - destination:
+            host: ms-backend.ms-backend.svc.cluster.local
+      timeout: 20s
+      retries:
+        attempts: 1
+        perTryTimeout: 15s
+        retryOn: connect-failure,refused-stream,5xx
+    - name: default
+      route:
+        - destination:
+            host: ms-backend.ms-backend.svc.cluster.local
+      timeout: 10s
