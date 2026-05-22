@@ -21,12 +21,14 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ms-frontend
+  name: ms-backend
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ms-backend
+  name: ms-gateway
+  labels:
+    istio-injection: enabled
 ---
 apiVersion: v1
 kind: Namespace
@@ -62,7 +64,7 @@ echo "[2] Istio 설치 완료."
 ### 2-1. 라벨 추가 (Istio 설치 이후)
 echo "[2-1] Istio sidecar injection 활성화 중..."
 kubectl label namespace default istio-injection=enabled --overwrite
-kubectl label namespace ms-frontend istio-injection=enabled --overwrite
+kubectl label namespace ms-gateway istio-injection=enabled --overwrite
 kubectl label namespace ms-backend istio-injection=enabled --overwrite
 kubectl label namespace ms-models istio-injection=enabled --overwrite
 echo "[2-1] 라벨 추가 완료."
@@ -83,7 +85,25 @@ done
 
 # Magic DNS 도메인 설정 (sslip.io 사용)
 MAGIC_DOMAIN="${EXTERNAL_IP}.sslip.io"
+API_DOMAIN="api.${MAGIC_DOMAIN}"
+FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-"http://localhost:3000"}
+USE_LOCAL_IMAGES=${USE_LOCAL_IMAGES:-"false"}
+DOCKER_REGISTRY=${DOCKER_REGISTRY:-"xxhyeok"}
+
+if [[ "${USE_LOCAL_IMAGES}" == "true" ]]; then
+  BACKEND_IMAGE="ko.local/ms-backend:local"
+  GATEWAY_IMAGE="ko.local/ms-api-gateway:local"
+  IMAGE_PULL_POLICY="IfNotPresent"
+else
+  BACKEND_IMAGE="${DOCKER_REGISTRY}/ms-backend:latest"
+  GATEWAY_IMAGE="${DOCKER_REGISTRY}/ms-api-gateway:latest"
+  IMAGE_PULL_POLICY="IfNotPresent"
+fi
+
 echo "Magic DNS 도메인: $MAGIC_DOMAIN"
+echo "API 도메인: $API_DOMAIN"
+echo "허용할 외부 프론트엔드 Origin: $FRONTEND_ORIGIN"
+echo "로컬 이미지 사용: $USE_LOCAL_IMAGES"
 
 ### 4. Knative 설치 및 도메인 설정
 echo "[4] Knative Serving 설치 중..."
@@ -103,6 +123,15 @@ echo "[4] Knative 설치 완료."
 echo "[4-2] Knative initContainers 기능 활성화 중..."
 kubectl patch configmap config-features -n knative-serving --type merge -p '{"data":{"kubernetes.podspec-init-containers":"enabled"}}'
 echo "[4-2] Knative initContainers 기능 활성화 완료."
+
+if [[ "${USE_LOCAL_IMAGES}" == "true" ]]; then
+  echo "[4-3] Knative 로컬 이미지 태그 해석 제외 설정 중..."
+  kubectl patch configmap config-deployment \
+    -n knative-serving \
+    --type merge \
+    -p '{"data":{"registriesSkippingTagResolving":"ko.local,dev.local,kind.local,localhost"}}'
+  echo "[4-3] Knative 로컬 이미지 태그 해석 제외 설정 완료."
+fi
 
 ### 5. 모니터링 구성
 echo "[5] 모니터링 서비스 설치 중..."
@@ -261,9 +290,24 @@ EOF
 echo "[5-1] 모니터링 서비스 게이트웨이 설정 완료."
 echo "[5] 모니터링 서비스 설치 완료."
 
-### 6. 프론트엔드/백엔드/DB 배포
+### 6. API Gateway/백엔드/DB 배포
 echo "[6] 백앤드 및 DB 배포 중..."
 kubectl apply -f postgres.yaml
+
+if [[ "${USE_LOCAL_IMAGES}" == "true" ]]; then
+  echo "[6-local] backend/api-gateway 이미지를 로컬 빌드 후 minikube에 로드합니다..."
+  command -v minikube >/dev/null 2>&1 || {
+    echo "USE_LOCAL_IMAGES=true를 사용하려면 minikube CLI가 필요합니다."
+    exit 1
+  }
+
+  docker build -t ${BACKEND_IMAGE} ../ms-backend
+  docker build -t ${GATEWAY_IMAGE} ../api-gateway
+
+  minikube image load ${BACKEND_IMAGE}
+  minikube image load ${GATEWAY_IMAGE}
+  echo "[6-local] 로컬 이미지 로드 완료: ${BACKEND_IMAGE}, ${GATEWAY_IMAGE}"
+fi
 
 # AI 서비스 URL을 동적으로 설정하여 백엔드 서비스 배포
 echo "[6-0] AI 서비스 URL을 동적으로 설정하여 백엔드 배포..."
@@ -292,51 +336,116 @@ spec:
               "until nc -z -w 2 database 5432; do echo 'Waiting for database...'; sleep 2; done",
             ]
       containers:
-        - image: xxhyeok/ms-backend:latest
+        - image: ${BACKEND_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
           ports:
             - containerPort: 8080
           env:
-            - name: SPRING_PROFILE
+            - name: SPRING_PROFILES_ACTIVE
               value: prod
-            - name: DATASOURCE_URL
+            - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://database:5432/cc-term
-            - name: DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_USERNAME
               value: user
-            - name: DATASOURCE_PASSWORD
+            - name: SPRING_DATASOURCE_PASSWORD
               value: "1234"
+            - name: EXTERNAL_AI_IMAGE_URL
+              value: http://ai-image-serving-predictor.ms-models.svc.cluster.local/v1/models/mobilenet:predict
+            - name: EXTERNAL_AI_IMAGE_HOST
+              value: ai-image-serving-predictor.ms-models.svc.cluster.local
+            - name: EXTERNAL_AI_TEXT_URL
+              value: http://ai-text-serving-predictor.ms-models.svc.cluster.local/v1/models/kobart-summary:predict
+            - name: EXTERNAL_AI_TEXT_HOST
+              value: ai-text-serving-predictor.ms-models.svc.cluster.local
 EOF
 
-### 6-1. 프론트엔드 .env.production 생성
-echo "[6-1] 프론트엔드 .env.production 생성..."
-cat <<EOF > ../ms-frontend/.env.production
-NEXT_PUBLIC_API_URL=http://ms-backend.ms-backend.${MAGIC_DOMAIN}
-NEXT_PUBLIC_GRAFANA_URL=http://grafana.${MAGIC_DOMAIN}
-NEXT_PUBLIC_KIALI_URL=http://kiali.${MAGIC_DOMAIN}
-EOF
+### 6-1. API Gateway 이미지 빌드/푸시 및 배포
+echo "[6-1] API Gateway 이미지 빌드 및 배포..."
 
-### 6-2. Next.js 빌드 및 Docker 이미지 빌드/푸시
-echo "[6-2] Next.js 프론트엔드 빌드 및 이미지 생성..."
-
-DOCKER_REGISTRY=${DOCKER_REGISTRY:-"xxhyeok"}
-FRONTEND_IMAGE="${DOCKER_REGISTRY}/ms-frontend:latest"
-
-cd ../ms-frontend
-npm install
-npm run build
-
-echo "[6-3] Docker 이미지 빌드 및 푸시..."
-docker build --platform linux/amd64 -t ${FRONTEND_IMAGE} .
-docker push ${FRONTEND_IMAGE}; then
-  echo "Docker 이미지 푸시 성공: ${FRONTEND_IMAGE}"
+if [[ "${USE_LOCAL_IMAGES}" != "true" ]]; then
+  cd ../api-gateway
+  docker build --platform linux/amd64 -t ${GATEWAY_IMAGE} .
+  if docker push ${GATEWAY_IMAGE}; then
+    echo "Docker 이미지 푸시 성공: ${GATEWAY_IMAGE}"
+  else
+    echo "Docker 이미지 푸시 실패: ${GATEWAY_IMAGE}"
+    exit 1
+  fi
+  cd ../infra
 else
-  echo "Docker 이미지 푸시 실패: ${FRONTEND_IMAGE}"
-  exit 1
+  echo "[6-1] USE_LOCAL_IMAGES=true 이므로 Docker Hub push를 건너뜁니다."
 fi
-cd ../infra
 
-### 6-4. 프론트엔드 Knative 서비스 배포
-echo "[6-4] Knative 프론트엔드 서비스 배포..."
-kubectl apply -f ksvc-ms-frontend.yaml
+echo "[6-2] API Gateway Knative 서비스 배포..."
+cat <<EOF | kubectl apply -f -
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: ms-gateway
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "5"
+        autoscaling.knative.dev/target: "50"
+    spec:
+      containers:
+        - image: ${GATEWAY_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 8088
+          env:
+            - name: PORT
+              value: "8088"
+            - name: BACKEND_URL
+              value: http://ms-backend.ms-backend.svc.cluster.local
+            - name: ALLOWED_ORIGINS
+              value: ${FRONTEND_ORIGIN}
+EOF
+
+echo "[6-3] API Gateway Istio Gateway/VirtualService 배포..."
+cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: ms-serving-gateway
+  namespace: ms-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - ${API_DOMAIN}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api-gateway
+  namespace: ms-gateway
+spec:
+  hosts:
+    - ${API_DOMAIN}
+  gateways:
+    - ms-serving-gateway
+  http:
+    - name: api
+      match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: api-gateway.ms-gateway.svc.cluster.local
+            port:
+              number: 8088
+      timeout: 30s
+EOF
+
 echo "[6] 애플리케이션 배포 완료."
 
 ### 6-5. cert-manager 설치
@@ -390,8 +499,13 @@ echo "  • Prometheus: http://prometheus.${MAGIC_DOMAIN}"
 echo "  • Grafana:    http://grafana.${MAGIC_DOMAIN}"
 echo "  • Jaeger:     http://jaeger.${MAGIC_DOMAIN}"
 echo ""
-echo "  • Frontend:   http://ms-frontend.ms-frontend.${MAGIC_DOMAIN}"
-echo "  • Backend:    http://ms-backend.ms-backend.${MAGIC_DOMAIN}"
+echo "  • API Gateway: http://${API_DOMAIN}"
+echo "  • Backend:     내부 서비스 전용 (ms-backend.ms-backend.svc.cluster.local)"
+echo ""
+echo "🌐 외부 프론트엔드 배포 시 환경변수:"
+echo "  • NEXT_PUBLIC_API_URL=http://${API_DOMAIN}"
+echo "  • FRONTEND_ORIGIN=${FRONTEND_ORIGIN}  # setup.sh 실행 전 실제 프론트엔드 Origin으로 설정"
+echo "  • USE_LOCAL_IMAGES=${USE_LOCAL_IMAGES}  # true이면 Docker Hub push 없이 minikube image load 사용"
 echo ""
 echo "🤖 AI 서비스 URL들:"
 echo "  • AI Image:   http://ai-image-serving.ms-models.${MAGIC_DOMAIN}/v1/models/mobilenet:predict"

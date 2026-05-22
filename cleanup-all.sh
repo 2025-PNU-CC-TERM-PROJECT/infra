@@ -7,10 +7,12 @@ echo "🧹 클러스터에서 모든 구성요소 삭제를 시작합니다..."
 
 ### 1. 애플리케이션 리소스 삭제
 echo "[1] 애플리케이션 리소스 삭제 중..."
-kubectl delete -f ksvc-ms-frontend.yaml --ignore-not-found
+kubectl delete -f apps/api-gateway-knative.yaml --ignore-not-found
+kubectl delete -f apps/api-gateway.yaml --ignore-not-found
 kubectl delete -f ksvc-ms-backend.yaml --ignore-not-found
 kubectl delete -f postgres.yaml --ignore-not-found
-kubectl delete -f kserve-sklearn.yaml --ignore-not-found
+kubectl delete -f Kserve-ai-image-serving.yaml --ignore-not-found
+kubectl delete -f Kserve-ai-text-serving.yaml --ignore-not-found
 echo "[1] 애플리케이션 리소스 삭제 완료."
 
 ### 2. Kiali 게이트웨이 삭제
@@ -50,14 +52,14 @@ echo "[6] Istio 삭제 완료."
 ### 7. 라벨 제거
 echo "[7] 네임스페이스 라벨 제거 중..."
 kubectl label namespace default istio-injection- || true
-kubectl label namespace ms-frontend istio-injection- || true
+kubectl label namespace ms-gateway istio-injection- || true
 kubectl label namespace ms-backend istio-injection- || true
 kubectl label namespace ms-models istio-injection- || true
 echo "[7] 네임스페이스 라벨 제거 완료."
 
 ### 8. 네임스페이스 삭제
 echo "[8] 네임스페이스 삭제 중..."
-kubectl delete namespace ms-frontend --ignore-not-found --wait=false || true
+kubectl delete namespace ms-gateway --ignore-not-found --wait=false || true
 kubectl delete namespace ms-backend --ignore-not-found --wait=false || true
 kubectl delete namespace ms-models --ignore-not-found --wait=false || true
 kubectl delete namespace monitoring --ignore-not-found --wait=false || true

@@ -6,11 +6,12 @@
 ## 🧩 구성 요소
 
 - **Istio**: 서비스 메시 관리 및 트래픽 제어
-- **Knative Serving**: 서버리스 백엔드/프론트엔드 애플리케이션 배포
+- **Knative Serving**: 서버리스 백엔드/API Gateway 애플리케이션 배포
 - **KServe**: AI 모델 배포 및 예측 처리
 - **Monitoring Stack**: Kiali, Grafana, Prometheus, Jaeger 기반 서비스 관찰성
 - **PostgreSQL**: 백엔드 데이터베이스
-- **Next.js 프론트엔드**: 클라이언트 애플리케이션
+- **API Gateway**: 외부 프론트엔드에서 내부 백엔드로 들어오는 API 요청 중계
+- **Next.js 프론트엔드**: Kubernetes 클러스터 바깥에서 별도 배포
 
 ## 📦 설치 스크립트 실행
 
@@ -25,10 +26,15 @@ export DOCKER_REGISTRY=${your-docker-name}
 > - Istio + ingress gateway  
 > - Knative Serving + net-istio + 도메인 설정  
 > - 모니터링 도구 설치 및 라우팅 설정  
-> - 백엔드/프론트엔드 빌드 및 배포  
+> - 백엔드/API Gateway 빌드 및 배포  
 > - cert-manager 설치  
 > - KServe 기반 AI 모델 서빙
 
+로컬 Minikube에서 레지스트리 push 없이 실행하려면 PowerShell에서 다음 스크립트를 사용합니다:
+
+```powershell
+.\setup-local-minikube.ps1
+```
 
 ## 🌐 설치 후 접근 가능한 주요 URL
 
@@ -38,6 +44,7 @@ export DOCKER_REGISTRY=${your-docker-name}
 
 | 서비스       | 주소 |
 |--------------|------|
+| API Gateway  | `http://api.<EXTERNAL-IP>.sslip.io` |
 | Kiali        | `http://kiali.<EXTERNAL-IP>.sslip.io`  
 | Prometheus   | `http://prometheus.<EXTERNAL-IP>.sslip.io`  
 | Grafana      | `http://grafana.<EXTERNAL-IP>.sslip.io`  
@@ -47,7 +54,7 @@ export DOCKER_REGISTRY=${your-docker-name}
 
 | 서비스       | 주소 |
 |--------------|------|
-| Frontend     | `http://ms-frontend.ms-frontend.<EXTERNAL-IP>.sslip.io`  
+| Frontend     | 클러스터 바깥(Vercel, S3 + CloudFront, 별도 Nginx 등)에 배포하고 `NEXT_PUBLIC_API_URL`을 API Gateway 주소로 설정 |
 | Backend      | `http://ms-backend.ms-backend.<EXTERNAL-IP>.sslip.io`  
 
 ### 🤖 AI 모델 서빙 (KServe)
