@@ -25,5 +25,11 @@ spec:
           env:
             - name: BACKEND_URL
               value: http://ms-backend.ms-backend.svc.cluster.local
+            - name: AUTH_SERVICE_URL
+              value: http://ms-backend.ms-backend.svc.cluster.local
+            - name: USER_SERVICE_URL
+              value: http://ms-backend.ms-backend.svc.cluster.local
+            - name: INFERENCE_SERVICE_URL
+              value: http://ms-backend.ms-backend.svc.cluster.local
             - name: ALLOWED_ORIGINS
               value: http://localhost:3000

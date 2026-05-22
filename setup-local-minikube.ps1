@@ -2,6 +2,8 @@ param(
     [string]$FrontendOrigin = "http://localhost:3000",
     [string]$DockerRegistry = "xxhyeok",
     [int]$IngressLocalPort = 8080,
+    [string]$PostgresPassword = "local-dev-postgres-password",
+    [string]$AppJwtSecret = "local-dev-secret-local-dev-secret-local-dev-secret-local-dev-secret",
     [switch]$UseLocalImages = $true,
     [switch]$SkipMonitoring,
     [switch]$SkipKServe
@@ -111,11 +113,13 @@ Invoke-Step "Check minikube and kubectl connectivity" {
 if ($UseLocalImages) {
     $BackendImage = "ko.local/ms-backend:local"
     $GatewayImage = "ko.local/ms-api-gateway:local"
+    $InferenceImage = "ko.local/ms-inference-service:local"
     $ImagePullPolicy = "IfNotPresent"
 }
 else {
     $BackendImage = "$DockerRegistry/ms-backend:latest"
     $GatewayImage = "$DockerRegistry/ms-api-gateway:latest"
+    $InferenceImage = "$DockerRegistry/ms-inference-service:latest"
     $ImagePullPolicy = "IfNotPresent"
 }
 
@@ -147,7 +151,20 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: ms-models
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ms-inference
 "@
+}
+
+Invoke-Step "Create backend secrets" {
+    kubectl create secret generic ms-backend-secrets `
+        -n ms-backend `
+        --from-literal=postgres-password="$PostgresPassword" `
+        --from-literal=app-jwt-secret="$AppJwtSecret" `
+        --dry-run=client -o yaml | kubectl apply -f -
 }
 
 Invoke-Step "Install Istio" {
@@ -173,6 +190,7 @@ Invoke-Step "Install Istio" {
     kubectl label namespace ms-gateway istio-injection=enabled --overwrite
     kubectl label namespace ms-backend istio-injection=enabled --overwrite
     kubectl label namespace ms-models istio-injection=enabled --overwrite
+    kubectl label namespace ms-inference istio-injection=enabled --overwrite
 }
 
 $ApiBaseUrl = "http://localhost:$IngressLocalPort"
@@ -285,17 +303,85 @@ Invoke-Step "Build local images and load them into minikube" {
     if ($UseLocalImages) {
         docker build -t $BackendImage (Join-Path $RepoRoot "ms-backend")
         docker build -t $GatewayImage (Join-Path $RepoRoot "api-gateway")
+        docker build -t $InferenceImage (Join-Path $RepoRoot "inference-service")
         minikube image load $BackendImage
         minikube image load $GatewayImage
+        minikube image load $InferenceImage
     }
     else {
         docker build -t $GatewayImage (Join-Path $RepoRoot "api-gateway")
         docker push $GatewayImage
+        docker build -t $InferenceImage (Join-Path $RepoRoot "inference-service")
+        docker push $InferenceImage
     }
 }
 
 Invoke-Step "Deploy PostgreSQL" {
     kubectl apply -f (Join-Path $InfraDir "postgres.yaml")
+}
+
+Invoke-Step "Deploy Inference Service" {
+    Apply-Yaml @"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-service
+  namespace: ms-inference
+  labels:
+    app: inference-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-service
+  template:
+    metadata:
+      labels:
+        app: inference-service
+    spec:
+      containers:
+        - name: inference-service
+          image: $InferenceImage
+          imagePullPolicy: $ImagePullPolicy
+          ports:
+            - containerPort: 8081
+          env:
+            - name: PORT
+              value: "8081"
+            - name: IMAGE_MODEL_URL
+              value: http://ai-image-serving-predictor.ms-models.svc.cluster.local/v1/models/mobilenet:predict
+            - name: IMAGE_MODEL_HOST
+              value: ai-image-serving-predictor.ms-models.svc.cluster.local
+            - name: TEXT_MODEL_URL
+              value: http://ai-text-serving-predictor.ms-models.svc.cluster.local/v1/models/kobart-summary:predict
+            - name: TEXT_MODEL_HOST
+              value: ai-text-serving-predictor.ms-models.svc.cluster.local
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-service
+  namespace: ms-inference
+spec:
+  selector:
+    app: inference-service
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+"@
 }
 
 Invoke-Step "Deploy backend Knative Service" {
@@ -333,7 +419,17 @@ spec:
             - name: SPRING_DATASOURCE_USERNAME
               value: user
             - name: SPRING_DATASOURCE_PASSWORD
-              value: "1234"
+              valueFrom:
+                secretKeyRef:
+                  name: ms-backend-secrets
+                  key: postgres-password
+            - name: APP_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ms-backend-secrets
+                  key: app-jwt-secret
+            - name: INTERNAL_INFERENCE_URL
+              value: http://inference-service.ms-inference.svc.cluster.local:8081
             - name: EXTERNAL_AI_IMAGE_URL
               value: http://ai-image-serving-predictor.ms-models.svc.cluster.local/v1/models/mobilenet:predict
             - name: EXTERNAL_AI_IMAGE_HOST

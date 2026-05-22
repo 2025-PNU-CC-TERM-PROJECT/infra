@@ -32,7 +32,17 @@ spec:
             - name: SPRING_DATASOURCE_USERNAME
               value: user
             - name: SPRING_DATASOURCE_PASSWORD
-              value: "1234"
+              valueFrom:
+                secretKeyRef:
+                  name: ms-backend-secrets
+                  key: postgres-password
+            - name: APP_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ms-backend-secrets
+                  key: app-jwt-secret
+            - name: INTERNAL_INFERENCE_URL
+              value: http://inference-service.ms-inference.svc.cluster.local:8081
             - name: EXTERNAL_AI_IMAGE_URL
               value: http://ai-image-serving-predictor.ms-models.svc.cluster.local/v1/models/mobilenet:predict
             - name: EXTERNAL_AI_IMAGE_HOST

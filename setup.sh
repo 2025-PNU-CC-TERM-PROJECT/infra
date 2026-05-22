@@ -34,6 +34,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: ms-models
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ms-inference
 EOF
 echo "[1] 네임스페이스 생성 완료."
 
@@ -67,6 +72,7 @@ kubectl label namespace default istio-injection=enabled --overwrite
 kubectl label namespace ms-gateway istio-injection=enabled --overwrite
 kubectl label namespace ms-backend istio-injection=enabled --overwrite
 kubectl label namespace ms-models istio-injection=enabled --overwrite
+kubectl label namespace ms-inference istio-injection=enabled --overwrite
 echo "[2-1] 라벨 추가 완료."
 
 ### 3. External IP 확인 및 Magic DNS 도메인 설정
@@ -89,14 +95,18 @@ API_DOMAIN="api.${MAGIC_DOMAIN}"
 FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-"http://localhost:3000"}
 USE_LOCAL_IMAGES=${USE_LOCAL_IMAGES:-"false"}
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-"xxhyeok"}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-"local-dev-postgres-password"}
+APP_JWT_SECRET=${APP_JWT_SECRET:-"local-dev-secret-local-dev-secret-local-dev-secret-local-dev-secret"}
 
 if [[ "${USE_LOCAL_IMAGES}" == "true" ]]; then
   BACKEND_IMAGE="ko.local/ms-backend:local"
   GATEWAY_IMAGE="ko.local/ms-api-gateway:local"
+  INFERENCE_IMAGE="ko.local/ms-inference-service:local"
   IMAGE_PULL_POLICY="IfNotPresent"
 else
   BACKEND_IMAGE="${DOCKER_REGISTRY}/ms-backend:latest"
   GATEWAY_IMAGE="${DOCKER_REGISTRY}/ms-api-gateway:latest"
+  INFERENCE_IMAGE="${DOCKER_REGISTRY}/ms-inference-service:latest"
   IMAGE_PULL_POLICY="IfNotPresent"
 fi
 
@@ -104,6 +114,14 @@ echo "Magic DNS 도메인: $MAGIC_DOMAIN"
 echo "API 도메인: $API_DOMAIN"
 echo "허용할 외부 프론트엔드 Origin: $FRONTEND_ORIGIN"
 echo "로컬 이미지 사용: $USE_LOCAL_IMAGES"
+
+echo "[3-1] 백엔드 Secret 적용 중..."
+kubectl create secret generic ms-backend-secrets \
+  -n ms-backend \
+  --from-literal=postgres-password="${POSTGRES_PASSWORD}" \
+  --from-literal=app-jwt-secret="${APP_JWT_SECRET}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+echo "[3-1] 백엔드 Secret 적용 완료."
 
 ### 4. Knative 설치 및 도메인 설정
 echo "[4] Knative Serving 설치 중..."
@@ -295,7 +313,7 @@ echo "[6] 백앤드 및 DB 배포 중..."
 kubectl apply -f postgres.yaml
 
 if [[ "${USE_LOCAL_IMAGES}" == "true" ]]; then
-  echo "[6-local] backend/api-gateway 이미지를 로컬 빌드 후 minikube에 로드합니다..."
+  echo "[6-local] backend/api-gateway/inference-service 이미지를 로컬 빌드 후 minikube에 로드합니다..."
   command -v minikube >/dev/null 2>&1 || {
     echo "USE_LOCAL_IMAGES=true를 사용하려면 minikube CLI가 필요합니다."
     exit 1
@@ -303,11 +321,84 @@ if [[ "${USE_LOCAL_IMAGES}" == "true" ]]; then
 
   docker build -t ${BACKEND_IMAGE} ../ms-backend
   docker build -t ${GATEWAY_IMAGE} ../api-gateway
+  docker build -t ${INFERENCE_IMAGE} ../inference-service
 
   minikube image load ${BACKEND_IMAGE}
   minikube image load ${GATEWAY_IMAGE}
-  echo "[6-local] 로컬 이미지 로드 완료: ${BACKEND_IMAGE}, ${GATEWAY_IMAGE}"
+  minikube image load ${INFERENCE_IMAGE}
+  echo "[6-local] 로컬 이미지 로드 완료: ${BACKEND_IMAGE}, ${GATEWAY_IMAGE}, ${INFERENCE_IMAGE}"
 fi
+
+if [[ "${USE_LOCAL_IMAGES}" != "true" ]]; then
+  echo "[6-0] Inference Service 이미지 빌드 및 푸시..."
+  cd ../inference-service
+  docker build --platform linux/amd64 -t ${INFERENCE_IMAGE} .
+  docker push ${INFERENCE_IMAGE}
+  cd ../infra
+fi
+
+echo "[6-0] Inference Service 배포..."
+cat <<EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-service
+  namespace: ms-inference
+  labels:
+    app: inference-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-service
+  template:
+    metadata:
+      labels:
+        app: inference-service
+    spec:
+      containers:
+        - name: inference-service
+          image: ${INFERENCE_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 8081
+          env:
+            - name: PORT
+              value: "8081"
+            - name: IMAGE_MODEL_URL
+              value: http://ai-image-serving-predictor.ms-models.svc.cluster.local/v1/models/mobilenet:predict
+            - name: IMAGE_MODEL_HOST
+              value: ai-image-serving-predictor.ms-models.svc.cluster.local
+            - name: TEXT_MODEL_URL
+              value: http://ai-text-serving-predictor.ms-models.svc.cluster.local/v1/models/kobart-summary:predict
+            - name: TEXT_MODEL_HOST
+              value: ai-text-serving-predictor.ms-models.svc.cluster.local
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-service
+  namespace: ms-inference
+spec:
+  selector:
+    app: inference-service
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+EOF
 
 # AI 서비스 URL을 동적으로 설정하여 백엔드 서비스 배포
 echo "[6-0] AI 서비스 URL을 동적으로 설정하여 백엔드 배포..."
@@ -348,7 +439,17 @@ spec:
             - name: SPRING_DATASOURCE_USERNAME
               value: user
             - name: SPRING_DATASOURCE_PASSWORD
-              value: "1234"
+              valueFrom:
+                secretKeyRef:
+                  name: ms-backend-secrets
+                  key: postgres-password
+            - name: APP_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ms-backend-secrets
+                  key: app-jwt-secret
+            - name: INTERNAL_INFERENCE_URL
+              value: http://inference-service.ms-inference.svc.cluster.local:8081
             - name: EXTERNAL_AI_IMAGE_URL
               value: http://ai-image-serving-predictor.ms-models.svc.cluster.local/v1/models/mobilenet:predict
             - name: EXTERNAL_AI_IMAGE_HOST

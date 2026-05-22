@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: cc-term
       POSTGRES_USER: user
-      POSTGRES_PASSWORD: "1234"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-postgres-password}
     ports:
       - "5432:5432"
     volumes:
@@ -33,6 +33,21 @@ services:
     ports:
       - "9002:9000"
 
+  inference-service:
+    build:
+      context: ../../inference-service
+    environment:
+      PORT: 8081
+      IMAGE_MODEL_URL: http://image-model:9000/v1/models/mobilenet:predict
+      IMAGE_MODEL_HOST: image-model
+      TEXT_MODEL_URL: http://text-model:9000/v1/models/kobart-summary:predict
+      TEXT_MODEL_HOST: text-model
+    ports:
+      - "8081:8081"
+    depends_on:
+      - image-model
+      - text-model
+
   backend:
     build:
       context: ../../ms-backend
@@ -40,8 +55,9 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/cc-term
       SPRING_DATASOURCE_USERNAME: user
-      SPRING_DATASOURCE_PASSWORD: "1234"
-      APP_JWT_SECRET: local-dev-secret-local-dev-secret-local-dev-secret-local-dev-secret
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-postgres-password}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-local-dev-secret-local-dev-secret-local-dev-secret-local-dev-secret}
+      INTERNAL_INFERENCE_URL: http://inference-service:8081
       EXTERNAL_AI_IMAGE_URL: http://image-model:9000/v1/models/mobilenet:predict
       EXTERNAL_AI_IMAGE_HOST: image-model
       EXTERNAL_AI_TEXT_URL: http://text-model:9000/v1/models/kobart-summary:predict
@@ -55,6 +71,8 @@ services:
         condition: service_started
       text-model:
         condition: service_started
+      inference-service:
+        condition: service_started
 
   api-gateway:
     build:
@@ -62,6 +80,9 @@ services:
     environment:
       PORT: 8088
       BACKEND_URL: http://backend:8080
+      AUTH_SERVICE_URL: http://backend:8080
+      USER_SERVICE_URL: http://backend:8080
+      INFERENCE_SERVICE_URL: http://backend:8080
       ALLOWED_ORIGINS: http://localhost:3000
     ports:
       - "8088:8088"

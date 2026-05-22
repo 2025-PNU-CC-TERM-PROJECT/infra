@@ -24,7 +24,10 @@ spec:
             - name: POSTGRES_USER
               value: user
             - name: POSTGRES_PASSWORD
-              value: "1234"
+              valueFrom:
+                secretKeyRef:
+                  name: ms-backend-secrets
+                  key: postgres-password
           volumeMounts:
             - name: postgres-storage
               mountPath: /var/lib/postgresql/data
